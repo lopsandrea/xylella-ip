@@ -50,29 +50,27 @@ treeData = struct2table(kmlData);
 treeData.Geometry = [];
 treeData.Description = [];
 [treeData.geoX, treeData.geoY] = projfwd(proj, treeData.Lat, treeData.Lon);
+[treeData.xIntrinsic, treeData.yIntrinsic] = worldToIntrinsic(RSegmented, treeData.geoX, treeData.geoY);
 
 % Offset points
-treeData.geoX = treeData.geoX - 2;
-treeData.geoY = treeData.geoY + 4;
+treeData.xIntrinsic = treeData.xIntrinsic - 2;
+treeData.yIntrinsic = treeData.yIntrinsic + 4;
 
 % Remove undetermined tree indices
 indicesToRemove = [77, 120, 161];
 treeData(indicesToRemove, :) = [];
 
 % Calculate coordinate limits on images
-xMax = max(treeData.geoX);
-xMin = min(treeData.geoX);
-yMax = max(treeData.geoY);
-yMin = min(treeData.geoY);
+xMax = max(treeData.xIntrinsic);
+xMin = min(treeData.xIntrinsic);
+yMax = max(treeData.yIntrinsic);
+yMin = min(treeData.yIntrinsic);
 
 % Filter bounding boxes based on specified criteria
 filteredBoundingBoxes = [];
 for i = 1:numel(boundingBoxes)
-    bb = boundingBoxes(i);
-    if bb.BoundingBox(1) >= xMin - 20 && bb.BoundingBox(1) <= xMax + 20 && ...
-       bb.BoundingBox(2) >= yMin - 20 && bb.BoundingBox(2) <= yMax + 20 && ...
-       bb.BoundingBox(3) < 60 && bb.BoundingBox(4) < 60
-        filteredBoundingBoxes = [filteredBoundingBoxes; bb];
+    if boundingBoxes(i).BoundingBox(1) >= xMin - 20 && boundingBoxes(i).BoundingBox(1) <= xMax + 20 && boundingBoxes(i).BoundingBox(2) >= yMin - 20 && boundingBoxes(i).BoundingBox(2) <= yMax + 20 && boundingBoxes(i).BoundingBox(3) < 60 && boundingBoxes(i).BoundingBox(4) < 60
+        filteredBoundingBoxes = [filteredBoundingBoxes; boundingBoxes(i)];
     end
 end
 
@@ -88,7 +86,7 @@ for t = 1:size(treeData, 1)
         if ~isBoundingBoxAssigned(i)
             bb = filteredBoundingBoxes(i);
             bbCenter = [bb.BoundingBox(1) + (bb.BoundingBox(3) / 2), bb.BoundingBox(2) + (bb.BoundingBox(4) / 2)];
-            distances(i) = sqrt((treeData.geoX(t) - bbCenter(1)).^2 + (treeData.geoY(t) - bbCenter(2)).^2);
+            distances(i) = sqrt((treeData.xIntrinsic(t) - bbCenter(1)).^2 + (treeData.yIntrinsic(t) - bbCenter(2)).^2);
         else
             distances(i) = inf;
         end
@@ -111,10 +109,10 @@ hold on;
 for i = 1:numTrees
     tempBoundingBox = treeData(i, :).BoundingBox;
     color = colorMap(i, :);
-    rectangle('Position', tempBoundingBox, 'EdgeColor', color, 'LineWidth', 2);
+    rectangle('Position', tempBoundingBox.BoundingBox, 'EdgeColor', color, 'LineWidth', 2);
 end
-scatter(treeData.geoX, treeData.geoY, 50, colorMap(1:numTrees, :), 'filled');
-text(treeData.geoX, treeData.geoY, treeData.Name, 'FontSize', 8, 'HorizontalAlignment', 'left', 'VerticalAlignment', 'bottom');
+scatter(treeData.xIntrinsic, treeData.yIntrinsic, 50, colorMap(1:numTrees, :), 'filled');
+text(treeData.xIntrinsic, treeData.yIntrinsic, treeData.Name, 'FontSize', 8, 'HorizontalAlignment', 'left', 'VerticalAlignment', 'bottom');
 
 hold off;
 
@@ -129,7 +127,7 @@ for t = 1:numTrees
     dimX = round(treeData.BoundingBox(t).BoundingBox(3));
     dimY = round(treeData.BoundingBox(t).BoundingBox(4));
     spectralROI = segmentedImage(y:y+dimY, x:x+dimX, :);
-    originalSpectralROI = originalsegmentedImage(y:y+dimY, x:x+dimX, :);
+    originalSpectralROI = hypercubeOriginal.DataCube(y:y+dimY, x:x+dimX, :);
     thermalROI = registeredThermalImage(y:y+dimY, x:x+dimX, :);
     npqiROI = npqiImage(y:y+dimY, x:x+dimX, :);
     ndviROI = ndviImage(y:y+dimY, x:x+dimX, :);
@@ -167,5 +165,5 @@ latFeatures = rescale(latFeatures, 0, 1);
 lonFeatures = rescale(lonFeatures, 0, 1);
 
 % Create feature set
-X = [originalFeatures, ndviFeatures, npqiFeatures, thermalFeatures];
-T = treeData.GT;
+originalX = [originalFeatures, ndviFeatures, npqiFeatures, thermalFeatures];
+originalT = treeData.GT;
