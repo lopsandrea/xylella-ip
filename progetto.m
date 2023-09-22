@@ -167,3 +167,7 @@ lonFeatures = rescale(lonFeatures, 0, 1);
 % Create feature set
 originalX = [originalFeatures, ndviFeatures, npqiFeatures, thermalFeatures];
 originalT = treeData.GT;
+
+% Save features in csv file
+writematrix(originalX, 'originalFeatures.csv');
+writematrix(originalT, 'originalTargets.csv');

@@ -1,8 +1,12 @@
+% Read features and targets
+originalX = readmatrix('originalFeatures.csv');
+originalT = readmatrix('originalTargets.csv');
+
 % Define the number of folds for cross-validation
 nK = 2;
 
 % Create a cross-validation partition
-c = cvpartition(t, 'KFold', nK);
+c = cvpartition(originalT, 'KFold', nK);
 
 % Loop through each fold
 for k = 1:nK
