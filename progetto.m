@@ -1,4 +1,4 @@
-% Carica i file dati e header
+% Load data and header files
 datafile = 'tree_segmented.dat';
 hdrfile = 'tree_segmented.hdr';
 originaldatafile = 'taglio_Ostuni_EL_gorgognolo.img';
@@ -6,42 +6,51 @@ originalhdrfile = 'taglio_Ostuni_EL_gorgognolo.hdr';
 termfile = 'Reg_Term_Ostuni_fc4.tif';
 kmlFile = 'doc.kml';
 
+% Set random number generator seed
 rng(42)
 
-% Leggi le immagini georeferenziate
-hcube=hypercube(originaldatafile,originalhdrfile);
-image415=hcube.DataCube(:,:,5);
-image435=hcube.DataCube(:,:,9);
-[dimImgX,dimImgY] = size(image435);
-for i=1:dimImgX
-    for j=1:dimImgY
-        NPQIImage(i,j) = (image415(i,j)-image435(i,j))/(image415(i,j)+image435(i,j));
+% Read georeferenced images
+hcube = hypercube(originaldatafile, originalhdrfile);
+image415 = hcube.DataCube(:, :, 5);
+image435 = hcube.DataCube(:, :, 9);
+[dimImgX, dimImgY] = size(image435);
+
+% Calculate NPQI Image
+NPQIImage = zeros(dimImgX, dimImgY);
+for i = 1:dimImgX
+    for j = 1:dimImgY
+        NPQIImage(i, j) = (image415(i, j) - image435(i, j)) / (image415(i, j) + image435(i, j));
     end
 end
+
+% Calculate NDVI Image
 NDVIImage = ndvi(hcube);
+
+% Read georeferenced images and configure registration
 [originalsegmentedImage, originalRSegmented] = readgeoraster(originaldatafile);
 [segmentedImage, RSegmented] = readgeoraster(datafile);
 [termImage, RTerm] = readgeoraster(termfile);
 
-for i=1:47
-    originalsegmentedImage(:,:,i)=rescale(originalsegmentedImage(:,:,i));
-    segmentedImage(:,:,i)=rescale(segmentedImage(:,:,i));
+% Rescale image values
+for i = 1:47
+    originalsegmentedImage(:, :, i) = rescale(originalsegmentedImage(:, :, i));
+    segmentedImage(:, :, i) = rescale(segmentedImage(:, :, i));
 end
 
-% Seleziona il livello di chiome segmentate
+% Select the segmented canopy level
 bwSegmentedImage = segmentedImage(:, :, 47);
 RA = imref2d(size(bwSegmentedImage));
 RB = imref2d(size(termImage));
 
-% Configura il registro delle immagini
+% Configure image registration
 [optimizer, metric] = imregconfig("multimodal");
 termImageRegistered = imregister(termImage, RB, bwSegmentedImage, RA, 'translation', optimizer, metric);
 
-% Estrai regioni dalla maschera binaria
+% Extract regions from binary mask
 regions = logical(bwSegmentedImage);
 boundingBoxes = regionprops(regions, 'BoundingBox');
 
-% Leggi i dati KML e proiettali sulla CRS delle immagini segmentate
+% Read KML data and project it to the segmented image CRS
 kmlData = kml2struct(kmlFile);
 proj = RSegmented.ProjectedCRS;
 trees = struct2table(kmlData);
@@ -49,21 +58,22 @@ trees.Geometry = [];
 trees.Description = [];
 [trees.geoX, trees.geoY] = projfwd(proj, trees.Lat, trees.Lon);
 [trees.xIntrinsic, trees.yIntrinsic] = worldToIntrinsic(RSegmented, trees.geoX, trees.geoY);
-% Calcolo ofset punti
+
+% Offset points
 trees.xIntrinsic = trees.xIntrinsic - 2;
 trees.yIntrinsic = trees.yIntrinsic + 4;
 
-% Rimuovi indici alberi non determinati
+% Remove undetermined tree indices
 indicesToRemove = [77, 120, 161];
 trees(indicesToRemove, :) = [];
 
-% Calcola i limiti delle coordinate sulle immagini
+% Calculate coordinate limits on images
 xMax = max(trees.xIntrinsic);
 xMin = min(trees.xIntrinsic);
 yMax = max(trees.yIntrinsic);
 yMin = min(trees.yIntrinsic);
 
-% Filtra bounding boxes in base ai criteri specificati
+% Filter bounding boxes based on specified criteria
 nuovoBoundingBoxes = [];
 for i = 1:numel(boundingBoxes)
     if boundingBoxes(i).BoundingBox(1) >= xMin - 20 && boundingBoxes(i).BoundingBox(1) <= xMax + 20 && ...
@@ -73,11 +83,11 @@ for i = 1:numel(boundingBoxes)
     end
 end
 
-% Inizializza flag per il tracciamento dei bounding boxes assegnati
+% Initialize flags for tracking assigned bounding boxes
 bbAssigned = false(numel(nuovoBoundingBoxes), 1);
 BB = [];
 
-% Associa bounding boxes agli alberi
+% Associate bounding boxes with trees
 for t = 1:size(trees, 1)
     distances = zeros(1, numel(nuovoBoundingBoxes));
     
@@ -99,7 +109,7 @@ for t = 1:size(trees, 1)
 end
 trees.BB = BB';
 
-% Visualizza immagini segmentate e bounding boxes
+% Display segmented images and bounding boxes
 numTrees = size(trees, 1);
 colorMap = rand([numTrees, 3]);
 figure;
@@ -116,7 +126,7 @@ text(trees.xIntrinsic, trees.yIntrinsic, trees.Name, 'FontSize', 8, 'HorizontalA
 
 hold off;
 
-% Features calcolate dalle regioni dei bounding boxes
+% Calculate features from bounding box regions
 averSpectralFeatures = zeros(numTrees, 47);
 averThermalFeatures = zeros(numTrees, size(termImageRegistered, 3));
 averOriginalFeatures = zeros(numTrees, 47);
@@ -159,9 +169,10 @@ for t = 1:numTrees
     lonFeatures(t) = trees.Lon(t);
 end
 
-latFeatures = rescale(latFeatures,0,1);
-lonFeatures = rescale(lonFeatures,0,1);
+% Rescale latitude and longitude features
+latFeatures = rescale(latFeatures, 0, 1);
+lonFeatures = rescale(lonFeatures, 0, 1);
 
-% Crea set di features
-x = [averOriginalFeatures,averndviFeatures, avernpqiFeatures, averThermalFeatures];
+% Create feature set
+x = [averOriginalFeatures, averndviFeatures, avernpqiFeatures, averThermalFeatures];
 t = trees.GT;
